@@ -2,7 +2,7 @@ name: CI/CD Backend
 
 on:
   push:
-    branches: [ "dev", "main" ] # A automação roda sempre que houver envios para essas branches
+    branches: [ "dev", "main" ] 
 
 jobs:
   test-and-publish:
@@ -60,8 +60,7 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/cargo-truck-backend:latest
-        
+
       - name: 8. Deploy automatizado na AWS EC2 (CD)
         if: github.ref == 'refs/heads/main' # Roda apenas na branch main
         uses: appleboy/ssh-action@v1.0.3 # Ferramenta que acessa o servidor via SSH

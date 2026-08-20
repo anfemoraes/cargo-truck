@@ -61,3 +61,25 @@ jobs:
           context: ./backend
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/cargo-truck-backend:latest
+        
+      - name: 8. Deploy automatizado na AWS EC2 (CD)
+        if: github.ref == 'refs/heads/main' # Roda apenas na branch main
+        uses: appleboy/ssh-action@v1.0.3 # Ferramenta que acessa o servidor via SSH
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ${{ secrets.AWS_USERNAME }}
+          key: ${{ secrets.AWS_PRIVATE_KEY }}
+          script: |
+            # 1. Autentica o servidor AWS no GitHub Container Registry
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            # 2. Baixa a versão mais recente da imagem da sua API
+            docker pull ghcr.io/${{ github.repository_owner }}/cargo-truck-backend:latest
+            
+            # 3. Para e remove a versão antiga da API que estava rodando (ignora erro se não existir)
+            docker stop cargo-truck-backend || true
+            docker rm cargo-truck-backend || true
+            
+            # 4. Inicia a nova versão conectando a porta 80 da AWS à porta 3000 do container
+            # O ajuste de segurança foi feito aqui: -p 80:3000
+            docker run -d --name cargo-truck-backend -p 80:3000 ghcr.io/${{ github.repository_owner }}/cargo-truck-backend:latest

@@ -1,0 +1,78 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO cargos\n        (\n            origem,\n            destino,\n            peso,\n            volume,\n            status\n        )\n        VALUES\n        ($1,$2,$3,$4,$5)\n        RETURNING\n            id,\n            origem,\n            destino,\n            peso,\n            volume,\n            status as \"status: _\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "origem",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "destino",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "peso",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 4,
+        "name": "volume",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "status: _",
+        "type_info": {
+          "Custom": {
+            "name": "cargo_status",
+            "kind": {
+              "Enum": [
+                "pending",
+                "in_transit",
+                "delivered"
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Float8",
+        "Float8",
+        {
+          "Custom": {
+            "name": "cargo_status",
+            "kind": {
+              "Enum": [
+                "pending",
+                "in_transit",
+                "delivered"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ce4be775e943ebd4d87baee730a309ab8114e0835f74d13a0201fde0721a2f9b"
+}

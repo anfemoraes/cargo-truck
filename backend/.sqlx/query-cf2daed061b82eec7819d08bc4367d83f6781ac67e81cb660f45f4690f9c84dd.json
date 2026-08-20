@@ -1,0 +1,61 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            id,\n            origem,\n            destino,\n            peso,\n            volume,\n            status as \"status: _\"\n        FROM cargos\n        ORDER BY id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "origem",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "destino",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "peso",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 4,
+        "name": "volume",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "status: _",
+        "type_info": {
+          "Custom": {
+            "name": "cargo_status",
+            "kind": {
+              "Enum": [
+                "pending",
+                "in_transit",
+                "delivered"
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "cf2daed061b82eec7819d08bc4367d83f6781ac67e81cb660f45f4690f9c84dd"
+}

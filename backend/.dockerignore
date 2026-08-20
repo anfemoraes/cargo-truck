@@ -1,0 +1,4 @@
+# cargo-truck/backend/.dockerignore
+target/
+**/*.rs.bk
+.env

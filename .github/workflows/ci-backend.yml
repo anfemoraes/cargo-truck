@@ -7,7 +7,7 @@ on:
 permissions:
   contents: read
   packages: write
-  
+
 jobs:
   test-and-publish:
     runs-on: ubuntu-latest
@@ -78,12 +78,18 @@ jobs:
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             
             # 2. Baixa a versão mais recente da imagem da sua API
-            docker pull ghcr.io/${{ github.repository_owner }}/cargo-truck-backend:latest
+            docker pull ghcr.io/myartistry/cargo-truck-backend:latest
             
-            # 3. Para e remove a versão antiga da API que estava rodando (ignora erro se não existir)
+            # 3. Cria uma rede virtual no servidor para o Banco e a API conversarem com segurança
+            docker network create cargo-rede || true
+            
+            # 4. Sobe o banco de dados PostgreSQL na nuvem
+            docker run -d --name cargo-db --network cargo-rede -e POSTGRES_USER=usuario -e POSTGRES_PASSWORD=senha -e POSTGRES_DB=cargo_truck postgres:15 || true
+            
+            # 5. Limpa a versão velha da API
             docker stop cargo-truck-backend || true
             docker rm cargo-truck-backend || true
             
-            # 4. Inicia a nova versão conectando a porta 80 da AWS à porta 3000 do container
-            # O ajuste de segurança foi feito aqui: -p 80:3000
-            docker run -d --name cargo-truck-backend -p 80:3000 ghcr.io/${{ github.repository_owner }}/cargo-truck-backend:latest
+            # 6. Inicia a nova versão conectada ao banco e à porta 80 externa
+            # Note a inclusão do -e DATABASE_URL conectando ao container "cargo-db"
+            docker run -d --name cargo-truck-backend --network cargo-rede -p 80:3000 -e DATABASE_URL=postgres://usuario:senha@cargo-db:5432/cargo_truck ghcr.io/myartistry/cargo-truck-backend:latest

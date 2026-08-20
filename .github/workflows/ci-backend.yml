@@ -2,7 +2,7 @@ name: CI/CD Backend
 
 on:
   push:
-    branches: [ "dev", "main" ] # A automação roda sempre que houver envios para essas branches
+    branches: [ "dev", "main" ] 
 
 jobs:
   test-and-publish:

@@ -60,6 +60,7 @@ jobs:
         with:
           context: ./backend
           push: true
+          tags: ghcr.io/myartistry/cargo-truck-backend:latest
 
       - name: 8. Deploy automatizado na AWS EC2 (CD)
         if: github.ref == 'refs/heads/main' # Roda apenas na branch main

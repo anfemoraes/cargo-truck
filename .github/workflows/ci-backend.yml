@@ -1,0 +1,63 @@
+name: CI/CD Backend
+
+on:
+  push:
+    branches: [ "dev", "main" ] # A automação roda sempre que houver envios para essas branches
+
+jobs:
+  test-and-publish:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: usuario
+          POSTGRES_PASSWORD: senha
+          POSTGRES_DB: cargo_truck
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: 1. Baixar o código do repositório
+        uses: actions/checkout@v3
+
+      - name: 2. Preparar o ambiente Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: 3. Instalar SQLx CLI para o Banco de Dados
+        run: cargo install sqlx-cli --no-default-features --features rustls,postgres
+
+      - name: 4. Executar Migrations
+        working-directory: ./backend
+        run: sqlx migrate run
+        env:
+          DATABASE_URL: postgres://usuario:senha@localhost:5432/cargo_truck
+
+      - name: 5. Rodar Testes Automatizados do Backend
+        working-directory: ./backend
+        run: cargo test
+        env:
+          DATABASE_URL: postgres://usuario:senha@localhost:5432/cargo_truck
+
+      - name: 6. Login no GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }} 
+
+      - name: 7. Build Automático e Publicação da Imagem Docker
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/cargo-truck-backend:latest

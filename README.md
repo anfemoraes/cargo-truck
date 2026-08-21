@@ -379,15 +379,6 @@ VITE_API_URL=http://127.0.0.1:3000
 
 ---
 
-## 🤖 Automação
-
-* [ ] Ansible
-* [ ] Configuração automática de servidores
-* [ ] Instalação de dependências
-* [ ] Deploy automatizado
-
----
-
 # 📊 Visão DevOps
 
 Este projeto busca aplicar princípios modernos de DevOps, como:

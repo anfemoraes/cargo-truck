@@ -1,0 +1,95 @@
+name: CI/CD Backend
+
+on:
+  push:
+    branches: [ "dev", "main" ] 
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  test-and-publish:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: usuario
+          POSTGRES_PASSWORD: senha
+          POSTGRES_DB: cargo_truck
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: 1. Baixar o código do repositório
+        uses: actions/checkout@v3
+
+      - name: 2. Preparar o ambiente Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: 3. Instalar SQLx CLI para o Banco de Dados
+        run: cargo install sqlx-cli --no-default-features --features rustls,postgres
+
+      - name: 4. Executar Migrations
+        working-directory: ./backend
+        run: sqlx migrate run
+        env:
+          DATABASE_URL: postgres://usuario:senha@localhost:5432/cargo_truck
+
+      - name: 5. Rodar Testes Automatizados do Backend
+        working-directory: ./backend
+        run: cargo test
+        env:
+          DATABASE_URL: postgres://usuario:senha@localhost:5432/cargo_truck
+
+      - name: 6. Login no GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }} 
+
+      - name: 7. Build Automático e Publicação da Imagem Docker
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend
+          push: true
+          tags: ghcr.io/myartistry/cargo-truck-backend:latest
+
+      - name: 8. Deploy automatizado na AWS EC2 (CD)
+        if: github.ref == 'refs/heads/dev' # Roda apenas na branch main
+        uses: appleboy/ssh-action@v1.0.3 # Ferramenta que acessa o servidor via SSH
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ${{ secrets.AWS_USERNAME }}
+          key: ${{ secrets.AWS_PRIVATE_KEY }}
+          script: |
+            # 1. Autentica o servidor AWS no GitHub Container Registry
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            # 2. Baixa a versão mais recente da imagem da sua API
+            docker pull ghcr.io/myartistry/cargo-truck-backend:latest
+            
+            # 3. Cria uma rede virtual no servidor para o Banco e a API conversarem com segurança
+            docker network create cargo-rede || true
+            
+            # 4. Sobe o banco de dados PostgreSQL na nuvem
+            docker run -d --name cargo-db --network cargo-rede -e POSTGRES_USER=usuario -e POSTGRES_PASSWORD=senha -e POSTGRES_DB=cargo_truck postgres:15 || true
+            
+            # 5. Limpa a versão velha da API
+            docker stop cargo-truck-backend || true
+            docker rm cargo-truck-backend || true
+            
+            # 6. Inicia a nova versão conectada ao banco e à porta 80 externa
+            # Note a inclusão do -e DATABASE_URL conectando ao container "cargo-db"
+            docker run -d --name cargo-truck-backend --network cargo-rede -p 80:3000 -e DATABASE_URL=postgres://usuario:senha@cargo-db:5432/cargo_truck ghcr.io/myartistry/cargo-truck-backend:latest

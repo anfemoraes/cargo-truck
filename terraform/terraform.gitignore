@@ -1,0 +1,16 @@
+# Chaves SSH - NUNCA versionar
+cargo-truck-key
+cargo-truck-key.pub
+*.pem
+
+# Valores reais de variaveis (contem IP, chave publica etc.) - versione apenas o .example
+terraform.tfvars
+
+# Estado do Terraform - contem dados sensiveis e nao deve ir para o git
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+crash.log
+override.tf
+override.tf.json

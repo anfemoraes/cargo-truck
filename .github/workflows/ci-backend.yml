@@ -1,15 +1,21 @@
-name: CI/CD Backend
+name: CI/CD Backend + Infra (Terraform)
 
 on:
   push:
-    branches: [ "dev", "main" ] 
+    branches: [ "dev", "main" ]
 
 permissions:
   contents: read
   packages: write
 
+env:
+  IMAGE: ghcr.io/myartistry/cargo-truck-backend:latest
+
 jobs:
-  test-and-publish:
+  # ------------------------------------------------------------------
+  # 1. Testes do backend (igual antes)
+  # ------------------------------------------------------------------
+  test:
     runs-on: ubuntu-latest
 
     services:
@@ -52,44 +58,109 @@ jobs:
         env:
           DATABASE_URL: postgres://usuario:senha@localhost:5432/cargo_truck
 
-      - name: 6. Login no GitHub Container Registry
+  # ------------------------------------------------------------------
+  # 2. Build e publicação da imagem (igual antes, só separado em job)
+  # ------------------------------------------------------------------
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Login no GitHub Container Registry
         uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }} 
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 7. Build Automático e Publicação da Imagem Docker
+      - name: Build e publicação da imagem Docker
         uses: docker/build-push-action@v4
         with:
           context: ./backend
           push: true
-          tags: ghcr.io/myartistry/cargo-truck-backend:latest
+          tags: ${{ env.IMAGE }}
 
-      - name: 8. Deploy automatizado na AWS EC2 (CD)
-        if: github.ref == 'refs/heads/dev' # Roda apenas na branch main
-        uses: appleboy/ssh-action@v1.0.3 # Ferramenta que acessa o servidor via SSH
+  # ------------------------------------------------------------------
+  # 3. Terraform: garante que a infra na AWS existe (idempotente).
+  #    Só roda de fato algo na primeira vez; nas próximas o apply fica vazio.
+  # ------------------------------------------------------------------
+  terraform:
+    needs: build-and-push
+    if: github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./terraform
+    outputs:
+      instance_ip: ${{ steps.tf-outputs.outputs.instance_ip }}
+      sg_id: ${{ steps.tf-outputs.outputs.sg_id }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
-          host: ${{ secrets.AWS_HOST }}
-          username: ${{ secrets.AWS_USERNAME }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+        env:
+          TF_VAR_ssh_public_key: ${{ secrets.TF_SSH_PUBLIC_KEY }}
+          TF_VAR_ssh_allowed_cidr: ${{ secrets.TF_SSH_ALLOWED_CIDR }}
+          TF_VAR_docker_compose_repo: https://github.com/${{ github.repository }}.git
+
+      - name: Capturar outputs do Terraform
+        id: tf-outputs
+        run: |
+          echo "instance_ip=$(terraform output -raw instance_public_ip)" >> "$GITHUB_OUTPUT"
+          echo "sg_id=$(terraform output -raw security_group_id)" >> "$GITHUB_OUTPUT"
+
+  # ------------------------------------------------------------------
+  # 4. Deploy: autoriza o IP do runner por alguns minutos, sobe a stack
+  #    completa via docker compose (backend + frontend + db) e revoga o acesso.
+  # ------------------------------------------------------------------
+  deploy:
+    needs: terraform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      - name: Autorizar temporariamente o IP deste runner no Security Group
+        id: authorize
+        run: |
+          RUNNER_IP=$(curl -s https://checkip.amazonaws.com)
+          echo "runner_ip=$RUNNER_IP" >> "$GITHUB_OUTPUT"
+          aws ec2 authorize-security-group-ingress \
+            --group-id ${{ needs.terraform.outputs.sg_id }} \
+            --protocol tcp --port 22 --cidr "${RUNNER_IP}/32"
+
+      - name: Deploy via SSH (docker compose)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ needs.terraform.outputs.instance_ip }}
+          username: ubuntu
           key: ${{ secrets.AWS_PRIVATE_KEY }}
           script: |
-            # 1. Autentica o servidor AWS no GitHub Container Registry
+            cd /opt/cargo-truck
+            git pull
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            
-            # 2. Baixa a versão mais recente da imagem da sua API
-            docker pull ghcr.io/myartistry/cargo-truck-backend:latest
-            
-            # 3. Cria uma rede virtual no servidor para o Banco e a API conversarem com segurança
-            docker network create cargo-rede || true
-            
-            # 4. Sobe o banco de dados PostgreSQL na nuvem
-            docker run -d --name cargo-db --network cargo-rede -e POSTGRES_USER=usuario -e POSTGRES_PASSWORD=senha -e POSTGRES_DB=cargo_truck postgres:15 || true
-            
-            # 5. Limpa a versão velha da API
-            docker stop cargo-truck-backend || true
-            docker rm cargo-truck-backend || true
-            
-            # 6. Inicia a nova versão conectada ao banco e à porta 80 externa
-            # Note a inclusão do -e DATABASE_URL conectando ao container "cargo-db"
-            docker run -d --name cargo-truck-backend --network cargo-rede -p 80:3000 -e DATABASE_URL=postgres://usuario:senha@cargo-db:5432/cargo_truck ghcr.io/myartistry/cargo-truck-backend:latest
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull backend || true
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+
+      - name: Revogar o acesso SSH do runner
+        if: always()
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id ${{ needs.terraform.outputs.sg_id }} \
+            --protocol tcp --port 22 --cidr "${{ steps.authorize.outputs.runner_ip }}/32"

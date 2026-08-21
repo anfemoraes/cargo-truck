@@ -1,0 +1,14 @@
+version: '3.8'
+
+# Usado apenas no deploy (EC2). Mantém o docker-compose.yml normal para o
+# desenvolvimento local (frontend em localhost:5173) e só troca a porta
+# publicada do frontend para 80 em produção, batendo com o Security Group
+# do Terraform e com a saída "frontend_url".
+#
+# Uso no servidor:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+
+services:
+  frontend:
+    ports:
+      - "80:80"

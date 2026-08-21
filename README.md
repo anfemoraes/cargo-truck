@@ -407,7 +407,11 @@ Mais do que uma aplicação logística, o Cargo Truck é um laboratório prátic
 
 # 👨‍💻 Equipe
 
-Projeto desenvolvido para fins acadêmicos como prática de Arquitetura de Software, Cloud Computing e DevOps.
+Anderson
+André Moraes
+Andressa
+Joyce
+Katherine
 
 ---
 

@@ -1,39 +1,31 @@
-# 🚛 Cargo Truck — Cloud Native Logistics Platform
+🚛 Cargo Truck — Cloud Native Logistics Platform
+📌 Sobre o projeto
 
-## 📌 Sobre o projeto
-
-O **Cargo Truck** é uma plataforma de gerenciamento logístico desenvolvida com foco em arquitetura moderna de software e práticas DevOps.
+O Cargo Truck é uma plataforma de gerenciamento logístico desenvolvida com foco em arquitetura moderna de software e práticas DevOps.
 
 O objetivo do projeto é criar uma aplicação completa para gerenciamento de cargas, utilizando tecnologias atuais de desenvolvimento, integração contínua, infraestrutura como código e automação de servidores.
 
 Além da aplicação web, o projeto tem como finalidade demonstrar um fluxo DevOps completo envolvendo:
 
-* Desenvolvimento Full Stack;
-* Containerização com Docker;
-* Pipeline CI/CD;
-* Provisionamento de infraestrutura com Terraform;
-* Configuração automatizada com Ansible.
+    Desenvolvimento Full Stack;
+    Containerização com Docker;
+    Pipeline CI/CD;
+    Provisionamento de infraestrutura com Terraform na AWS.
 
----
-
-# 🎯 Objetivo
+🎯 Objetivo
 
 Construir uma solução logística onde usuários possam:
 
-* Cadastrar cargas;
-* Visualizar cargas cadastradas;
-* Consultar detalhes;
-* Atualizar informações;
-* Remover cargas;
-* Acompanhar o status do transporte.
+    Cadastrar cargas;
+    Visualizar cargas cadastradas;
+    Consultar detalhes;
+    Atualizar informações;
+    Remover cargas;
+    Acompanhar o status do transporte.
 
 O projeto também serve como demonstração prática de uma arquitetura preparada para ambientes de produção.
+🏗️ Arquitetura da aplicação
 
----
-
-# 🏗️ Arquitetura da aplicação
-
-```text
                  Usuário
 
                     │
@@ -50,11 +42,9 @@ O projeto também serve como demonstração prática de uma arquitetura preparad
                     ▼
 
           PostgreSQL Database
-```
 
 Arquitetura DevOps:
 
-```text
             GitHub Repository
 
                     │
@@ -75,56 +65,49 @@ Arquitetura DevOps:
                     │
                     ▼
 
-        Terraform + Ansible
+          Terraform (AWS)
 
                     │
                     ▼
 
             Ambiente Cloud
-```
 
----
+🛠️ Tecnologias utilizadas
+Frontend
 
-# 🛠️ Tecnologias utilizadas
-
-## Frontend
-
-* React
-* TypeScript
-* Vite
-* Tailwind CSS
-* Axios
-* React Router
+    React
+    TypeScript
+    Vite
+    Tailwind CSS
+    Axios
+    React Router
 
 Responsável pela interface do usuário e comunicação com a API.
+Backend
 
----
-
-## Backend
-
-* Rust
-* Axum
-* Tokio
-* Serde
-* SQLx
-* dotenvy
+    Rust
+    Axum
+    Tokio
+    Serde
+    SQLx
+    dotenvy
 
 Responsável pela API REST, regras de negócio e processamento das cargas.
+Banco de dados
 
----
-
-## Banco de dados
-
-* PostgreSQL
-* SQLx Migrations
+    PostgreSQL
+    SQLx Migrations
 
 Os dados das cargas são persistidos no PostgreSQL. As migrations são responsáveis por versionar o banco de dados e manter sua estrutura consistente entre diferentes ambientes.
+Infraestrutura
 
----
+    Docker · Docker Compose
+    Terraform (provisionamento na AWS)
+    GitHub Actions (CI/CD)
 
-# 📂 Estrutura do projeto
+Toda a infraestrutura (VPC, Security Group, instância EC2) é provisionada como código via Terraform, sem configuração manual de servidor.
+📂 Estrutura do projeto
 
-```text
 cargo-truck/
 
 ├── frontend/
@@ -145,42 +128,27 @@ cargo-truck/
 │   │   └── main.rs
 │   └── .env.example
 │
-├── docker/
 ├── terraform/
-├── ansible/
 ├── .github/
 │   └── workflows/
 │
 └── README.md
-```
 
----
-
-# 🚀 Funcionalidades atuais
-
-## Backend
+🚀 Funcionalidades atuais
+Backend
 
 API REST com persistência em PostgreSQL.
+Listar cargas
 
-### Listar cargas
-
-```http
 GET /cargos
-```
 
 Retorna todas as cargas cadastradas.
+Criar carga
 
----
-
-### Criar carga
-
-```http
 POST /cargos
-```
 
 Exemplo:
 
-```json
 {
   "origem": "Belém",
   "destino": "São Paulo",
@@ -188,224 +156,158 @@ Exemplo:
   "volume": 20,
   "status": "in_transit"
 }
-```
 
 Status disponíveis:
 
-* `pending`
-* `in_transit`
-* `delivered`
+    pending
+    in_transit
+    delivered
 
----
+Buscar carga
 
-### Buscar carga
-
-```http
 GET /cargos/{id}
-```
 
----
+Atualizar carga
 
-### Atualizar carga
-
-```http
 PUT /cargos/{id}
-```
 
----
+Remover carga
 
-### Remover carga
-
-```http
 DELETE /cargos/{id}
-```
 
----
-
-# 📋 Pré-requisitos
+📋 Pré-requisitos
 
 Antes de executar o projeto, certifique-se de possuir:
 
-* Git
-* Node.js (22 ou superior)
-* npm
-* Rust (Cargo)
-* PostgreSQL
-* SQLx CLI
+    Git
+    Node.js (22 ou superior)
+    npm
+    Rust (Cargo)
+    PostgreSQL
+    SQLx CLI
 
----
+💻 Executando o projeto
+1. Clone o repositório
 
-# 💻 Executando o projeto
-
-## 1. Clone o repositório
-
-```bash
 git clone <URL_DO_REPOSITORIO>
 cd cargo-truck
-```
 
----
+2. Configurando o banco
 
-## 2. Configurando o banco
+Crie um arquivo .env dentro da pasta backend.
 
-Crie um arquivo `.env` dentro da pasta `backend`.
-
-```env
 DATABASE_URL=postgres://usuario:senha@localhost:5432/cargo_truck
-```
 
 Execute as migrations:
 
-```bash
 cd backend
 sqlx migrate run
-```
 
 Para verificar o status das migrations:
 
-```bash
 sqlx migrate info
-```
 
----
-
-## 3. Executando o Backend
+3. Executando o Backend
 
 Entre na pasta:
 
-```bash
 cd backend
-```
 
 Compile o projeto:
 
-```bash
 cargo build
-```
 
 Execute a aplicação:
 
-```bash
 cargo run
-```
 
 API disponível em:
 
-```
 http://127.0.0.1:3000
-```
 
----
-
-## 4. Executando o Frontend
+4. Executando o Frontend
 
 Em outro terminal:
 
-```bash
 cd frontend
-```
 
 Instale as dependências:
 
-```bash
 npm install
-```
 
 Execute:
 
-```bash
 npm run dev
-```
 
 Aplicação disponível em:
 
-```
 http://localhost:5173
-```
 
-Caso a API esteja em outro endereço, crie um arquivo `.env.local`:
+Caso a API esteja em outro endereço, crie um arquivo .env.local:
 
-```env
 VITE_API_URL=http://127.0.0.1:3000
-```
 
----
+5. Infraestrutura (Terraform)
 
-# 🔄 Roadmap DevOps
+Provisiona a VPC, Security Group e instância EC2 na AWS. Veja o passo a passo completo em terraform/README.md.
 
-## ✅ Aplicação
+cd terraform
+terraform init
+terraform apply
 
-* [x] Frontend React
-* [x] Backend Rust
-* [x] API REST
-* [x] CRUD de cargas
-* [x] Integração Frontend + Backend
+🔄 Roadmap DevOps
+✅ Aplicação
 
----
+    Frontend React
+    Backend Rust
+    API REST
+    CRUD de cargas
+    Integração Frontend + Backend
 
-## ✅ Banco de Dados
+✅ Banco de Dados
 
-* [x] PostgreSQL
-* [x] SQLx Migrations
-* [x] Persistência dos dados
+    PostgreSQL
+    SQLx Migrations
+    Persistência dos dados
 
----
+✅ Containerização
 
-## 🐳 Containerização
+    Dockerfile (Frontend)
+    Dockerfile (Backend)
+    Docker Compose
+    Containers integrados
 
-* [ ] Dockerfile (Frontend)
-* [ ] Dockerfile (Backend)
-* [ ] Docker Compose
-* [ ] Containers integrados
+✅ CI/CD
 
----
+    GitHub Actions
+    Testes automatizados
+    Build automático
+    Publicação de imagens Docker
+    Deploy automatizado
 
-## ⚙️ CI/CD
+✅ Infraestrutura como Código
 
-* [ ] GitHub Actions
-* [ ] Testes automatizados
-* [ ] Build automático
-* [ ] Publicação de imagens Docker
-* [ ] Deploy automatizado
+    Terraform
+    Provisionamento na AWS (VPC, Security Group, EC2)
+    Ambiente versionado e reproduzível
 
----
-
-## 🏗️ Infraestrutura como Código
-
-* [ ] Terraform
-* [ ] Provisionamento da infraestrutura
-* [ ] Configuração de rede
-* [ ] Recursos em nuvem
-
----
-
-# 📊 Visão DevOps
+📊 Visão DevOps
 
 Este projeto busca aplicar princípios modernos de DevOps, como:
 
-* Automação de processos;
-* Integração Contínua (CI);
-* Entrega Contínua (CD);
-* Infraestrutura como Código (IaC);
-* Padronização de ambientes;
-* Escalabilidade;
-* Reprodutibilidade;
-* Preparação para ambientes de produção.
+    Automação de processos;
+    Integração Contínua (CI);
+    Entrega Contínua (CD);
+    Infraestrutura como Código (IaC);
+    Padronização de ambientes;
+    Escalabilidade;
+    Reprodutibilidade;
+    Preparação para ambientes de produção.
 
 Mais do que uma aplicação logística, o Cargo Truck é um laboratório prático para demonstrar o ciclo completo de desenvolvimento, entrega e operação de software em ambientes Cloud Native.
+👨‍💻 Equipe
 
----
-
-# 👨‍💻 Equipe
-
-Anderson
-André Moraes
-Andressa
-Joyce
-Katherine
-
----
-
-# 📄 Licença
+Anderson · André Moraes · Andressa · Joyce · Katherine
+📄 Licença
 
 Projeto desenvolvido para fins educacionais e de demonstração de práticas modernas de Engenharia de Software, DevOps e Cloud Native.

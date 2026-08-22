@@ -97,6 +97,7 @@ jobs:
 
     outputs:
       instance_ip: ${{ steps.tf-outputs.outputs.instance_ip }}
+      instance_id: ${{ steps.tf-outputs.outputs.instance_id }}
       sg_id: ${{ steps.tf-outputs.outputs.sg_id }}
 
     steps:
@@ -128,12 +129,14 @@ jobs:
         id: tf-outputs
         run: |
           INSTANCE_IP=$(terraform output -raw instance_public_ip)
+          INSTANCE_ID=$(terraform output -raw instance_id)
           SG_ID=$(terraform output -raw security_group_id)
 
-          echo "Instância EC2: $INSTANCE_IP"
+          echo "Instância EC2: $INSTANCE_IP ($INSTANCE_ID)"
           echo "Security Group: $SG_ID"
 
           echo "instance_ip=$INSTANCE_IP" >> "$GITHUB_OUTPUT"
+          echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
           echo "sg_id=$SG_ID" >> "$GITHUB_OUTPUT"
 
   # ------------------------------------------------------------------
@@ -152,6 +155,18 @@ jobs:
           aws-region: us-east-2
 
       # ----------------------------------------------------------------
+      # Aguarda a instância EC2 ficar totalmente pronta
+      # (evita SG liberado + SSH tentando conectar em instância que
+      # ainda não terminou de inicializar / cloud-init em andamento)
+      # ----------------------------------------------------------------
+      - name: Aguardar instância EC2 ficar pronta
+        run: |
+          echo "Aguardando status checks da instância ${{ needs.terraform.outputs.instance_id }}..."
+          aws ec2 wait instance-status-ok \
+            --instance-ids "${{ needs.terraform.outputs.instance_id }}"
+          echo "Instância pronta."
+
+      # ----------------------------------------------------------------
       # Autoriza temporariamente o IP do runner no Security Group
       # ----------------------------------------------------------------
       - name: Autorizar temporariamente o IP deste runner no Security Group
@@ -168,6 +183,24 @@ jobs:
             --protocol tcp \
             --port 22 \
             --cidr "${RUNNER_IP}/32"
+
+      # ----------------------------------------------------------------
+      # Espera a porta 22 realmente responder antes de tentar o SSH
+      # (cobre propagação de SG + IP de saída variável do runner)
+      # ----------------------------------------------------------------
+      - name: Aguardar porta 22 responder
+        run: |
+          HOST="${{ needs.terraform.outputs.instance_ip }}"
+          for i in $(seq 1 15); do
+            if nc -zv -w3 "$HOST" 22 2>/dev/null; then
+              echo "Porta 22 respondendo em $HOST (tentativa $i)."
+              exit 0
+            fi
+            echo "Tentativa $i: porta 22 ainda não respondeu, aguardando 5s..."
+            sleep 5
+          done
+          echo "ERRO: porta 22 não respondeu após várias tentativas."
+          exit 1
 
       # ----------------------------------------------------------------
       # Validação do par de chaves SSH
@@ -207,6 +240,7 @@ jobs:
           host: ${{ needs.terraform.outputs.instance_ip }}
           username: ubuntu
           key: ${{ secrets.AWS_PRIVATE_KEY }}
+          debug: true
           script: |
             sudo chown -R ubuntu:ubuntu /opt/cargo-truck
             git config --global --add safe.directory /opt/cargo-truck

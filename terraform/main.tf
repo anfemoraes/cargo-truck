@@ -5,7 +5,7 @@ locals {
 # --- AMI Ubuntu 22.04 mais recente (Canonical) ---
 data "aws_ami" "ubuntu" {
   most_recent = true
-  owners      = ["099720109477"] # Canonical
+  owners      = ["099720109477"]
 
   filter {
     name   = "name"
@@ -16,6 +16,11 @@ data "aws_ami" "ubuntu" {
     name   = "virtualization-type"
     values = ["hvm"]
   }
+}
+
+# --- Availability Zones ---
+data "aws_availability_zones" "available" {
+  state = "available"
 }
 
 # --- Rede ---
@@ -31,9 +36,9 @@ resource "aws_vpc" "main" {
 
 resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.main.id
-  cidr_block               = var.public_subnet_cidr
-  availability_zone        = var.availability_zone
-  map_public_ip_on_launch  = true
+  cidr_block              = var.public_subnet_cidr
+  availability_zone       = data.aws_availability_zones.available.names[0]
+  map_public_ip_on_launch = true
 
   tags = {
     Name = "${local.name}-public-subnet"
@@ -82,6 +87,7 @@ resource "aws_security_group" "app" {
 
   dynamic "ingress" {
     for_each = var.app_ports
+
     content {
       description = "Porta da aplicacao ${ingress.value}"
       from_port   = ingress.value
@@ -119,9 +125,9 @@ resource "aws_instance" "app" {
   key_name               = aws_key_pair.deployer.key_name
 
   user_data = templatefile("${path.module}/user_data.sh.tpl", {
-    project_name         = var.project_name
-    docker_compose_repo  = var.docker_compose_repo
-    git_branch           = var.git_branch
+    project_name        = var.project_name
+    docker_compose_repo = var.docker_compose_repo
+    git_branch          = var.git_branch
   })
 
   root_block_device {

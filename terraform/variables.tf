@@ -19,7 +19,7 @@ variable "environment" {
 variable "instance_type" {
   description = "Tipo da instancia EC2"
   type        = string
-  default     = "t3.micro"
+  default     = "t3.small"
 }
 
 variable "vpc_cidr" {

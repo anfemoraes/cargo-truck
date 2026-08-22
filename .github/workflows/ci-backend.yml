@@ -9,7 +9,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE: ghcr.io/myartistry/cargo-truck-backend:latest
+  IMAGE: ghcr.io/${{ github.repository_owner }}/cargo-truck-backend:latest
 
 jobs:
   # ------------------------------------------------------------------

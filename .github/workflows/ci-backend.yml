@@ -2,7 +2,7 @@ name: CI/CD Backend + Infra (Terraform)
 
 on:
   push:
-    branches: [ "dev", "main" ]
+    branches: ["dev", "main"]
 
 permissions:
   contents: read
@@ -10,6 +10,7 @@ permissions:
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/cargo-truck-backend:latest
+  AWS_REGION: us-east-2
 
 jobs:
   # ------------------------------------------------------------------
@@ -35,7 +36,7 @@ jobs:
 
     steps:
       - name: 1. Baixar o código do repositório
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: 2. Preparar o ambiente Rust
         uses: actions-rs/toolchain@v1
@@ -66,24 +67,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Login no GitHub Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build e publicação da imagem Docker
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v6
         with:
           context: ./backend
           push: true
           tags: ${{ env.IMAGE }}
 
   # ------------------------------------------------------------------
-  # 3. Terraform: garante que a infraestrutura na AWS existe
+  # 3. Terraform
   # ------------------------------------------------------------------
   terraform:
     needs: build-and-push
@@ -99,15 +100,17 @@ jobs:
       sg_id: ${{ steps.tf-outputs.outputs.sg_id }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: aws-actions/configure-aws-credentials@v4
+      - name: Configurar credenciais AWS
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION || 'us-east-2' }}
+          aws-region: us-east-2
 
-      - uses: hashicorp/setup-terraform@v3
+      - name: Instalar Terraform
+        uses: hashicorp/setup-terraform@v3
 
       - name: Terraform Init
         run: terraform init
@@ -115,6 +118,7 @@ jobs:
       - name: Terraform Apply
         run: terraform apply -auto-approve
         env:
+          TF_VAR_aws_region: us-east-2
           TF_VAR_ssh_public_key: ${{ secrets.TF_SSH_PUBLIC_KEY }}
           TF_VAR_ssh_allowed_cidr: ${{ secrets.TF_SSH_ALLOWED_CIDR }}
           TF_VAR_docker_compose_repo: https://github.com/${{ github.repository }}.git
@@ -123,8 +127,14 @@ jobs:
       - name: Capturar outputs do Terraform
         id: tf-outputs
         run: |
-          echo "instance_ip=$(terraform output -raw instance_public_ip)" >> "$GITHUB_OUTPUT"
-          echo "sg_id=$(terraform output -raw security_group_id)" >> "$GITHUB_OUTPUT"
+          INSTANCE_IP=$(terraform output -raw instance_public_ip)
+          SG_ID=$(terraform output -raw security_group_id)
+
+          echo "Instância EC2: $INSTANCE_IP"
+          echo "Security Group: $SG_ID"
+
+          echo "instance_ip=$INSTANCE_IP" >> "$GITHUB_OUTPUT"
+          echo "sg_id=$SG_ID" >> "$GITHUB_OUTPUT"
 
   # ------------------------------------------------------------------
   # 4. Deploy
@@ -134,11 +144,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: aws-actions/configure-aws-credentials@v4
+      - name: Configurar credenciais AWS
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION || 'us-east-2' }}
+          aws-region: us-east-2
 
       # ----------------------------------------------------------------
       # Autoriza temporariamente o IP do runner no Security Group
@@ -147,19 +158,19 @@ jobs:
         id: authorize
         run: |
           RUNNER_IP=$(curl -s https://checkip.amazonaws.com)
+
           echo "runner_ip=$RUNNER_IP" >> "$GITHUB_OUTPUT"
 
+          echo "Autorizando $RUNNER_IP/32 no Security Group ${{ needs.terraform.outputs.sg_id }}"
+
           aws ec2 authorize-security-group-ingress \
-            --group-id ${{ needs.terraform.outputs.sg_id }} \
+            --group-id "${{ needs.terraform.outputs.sg_id }}" \
             --protocol tcp \
             --port 22 \
             --cidr "${RUNNER_IP}/32"
 
       # ----------------------------------------------------------------
       # Validação do par de chaves SSH
-      #
-      # Não imprime nenhuma chave.
-      # Apenas compara os fingerprints.
       # ----------------------------------------------------------------
       - name: Validar par de chaves SSH
         env:
@@ -172,14 +183,14 @@ jobs:
           echo "Fingerprint da chave pública do Terraform:"
           printf '%s\n' "$SSH_PUBLIC_KEY" | ssh-keygen -lf -
 
-          echo "Fingerprint da chave pública derivada da chave privada do Deploy:"
+          echo "Fingerprint da chave pública derivada da chave privada:"
           ssh-keygen -y -f /tmp/deploy_key | ssh-keygen -lf -
 
           DERIVED=$(ssh-keygen -y -f /tmp/deploy_key)
           PROVIDED=$(printf '%s\n' "$SSH_PUBLIC_KEY")
 
           if [ "$DERIVED" = "$PROVIDED" ]; then
-            echo "OK: AWS_PRIVATE_KEY e TF_SSH_PUBLIC_KEY formam o mesmo par."
+            echo "OK: as chaves correspondem."
           else
             echo "ERRO: AWS_PRIVATE_KEY e TF_SSH_PUBLIC_KEY NÃO correspondem."
             exit 1
@@ -190,7 +201,7 @@ jobs:
       # ----------------------------------------------------------------
       # Deploy via SSH
       # ----------------------------------------------------------------
-      - name: Deploy via SSH (docker compose)
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ needs.terraform.outputs.instance_ip }}
@@ -199,6 +210,7 @@ jobs:
           script: |
             sudo chown -R ubuntu:ubuntu /opt/cargo-truck
             git config --global --add safe.directory /opt/cargo-truck
+
             cd /opt/cargo-truck
 
             git fetch origin
@@ -223,10 +235,10 @@ jobs:
       # Revoga o acesso SSH do runner
       # ----------------------------------------------------------------
       - name: Revogar o acesso SSH do runner
-        if: always()
+        if: always() && steps.authorize.outputs.runner_ip != ''
         run: |
           aws ec2 revoke-security-group-ingress \
-            --group-id ${{ needs.terraform.outputs.sg_id }} \
+            --group-id "${{ needs.terraform.outputs.sg_id }}" \
             --protocol tcp \
             --port 22 \
-            --cidr "${{ steps.authorize.outputs.runner_ip }}/32"
+            --cidr "${{ steps.authorize.outputs.runner_ip }}/32" || true

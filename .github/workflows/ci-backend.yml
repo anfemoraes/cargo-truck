@@ -13,7 +13,7 @@ env:
 
 jobs:
   # ------------------------------------------------------------------
-  # 1. Testes do backend (igual antes)
+  # 1. Testes do backend
   # ------------------------------------------------------------------
   test:
     runs-on: ubuntu-latest
@@ -59,11 +59,12 @@ jobs:
           DATABASE_URL: postgres://usuario:senha@localhost:5432/cargo_truck
 
   # ------------------------------------------------------------------
-  # 2. Build e publicação da imagem (igual antes, só separado em job)
+  # 2. Build e publicação da imagem
   # ------------------------------------------------------------------
   build-and-push:
     needs: test
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v3
 
@@ -82,19 +83,21 @@ jobs:
           tags: ${{ env.IMAGE }}
 
   # ------------------------------------------------------------------
-  # 3. Terraform: garante que a infra na AWS existe (idempotente).
-  #    Só roda de fato algo na primeira vez; nas próximas o apply fica vazio.
+  # 3. Terraform: garante que a infraestrutura na AWS existe
   # ------------------------------------------------------------------
   terraform:
     needs: build-and-push
     if: github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+
     defaults:
       run:
         working-directory: ./terraform
+
     outputs:
       instance_ip: ${{ steps.tf-outputs.outputs.instance_ip }}
       sg_id: ${{ steps.tf-outputs.outputs.sg_id }}
+
     steps:
       - uses: actions/checkout@v3
 
@@ -102,7 +105,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-2' }}
 
       - uses: hashicorp/setup-terraform@v3
 
@@ -123,28 +126,69 @@ jobs:
           echo "sg_id=$(terraform output -raw security_group_id)" >> "$GITHUB_OUTPUT"
 
   # ------------------------------------------------------------------
-  # 4. Deploy: autoriza o IP do runner por alguns minutos, sobe a stack
-  #    completa via docker compose (backend + frontend + db) e revoga o acesso.
+  # 4. Deploy
   # ------------------------------------------------------------------
   deploy:
     needs: terraform
     runs-on: ubuntu-latest
+
     steps:
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-2' }}
 
+      # ----------------------------------------------------------------
+      # Autoriza temporariamente o IP do runner no Security Group
+      # ----------------------------------------------------------------
       - name: Autorizar temporariamente o IP deste runner no Security Group
         id: authorize
         run: |
           RUNNER_IP=$(curl -s https://checkip.amazonaws.com)
           echo "runner_ip=$RUNNER_IP" >> "$GITHUB_OUTPUT"
+
           aws ec2 authorize-security-group-ingress \
             --group-id ${{ needs.terraform.outputs.sg_id }} \
-            --protocol tcp --port 22 --cidr "${RUNNER_IP}/32"
+            --protocol tcp \
+            --port 22 \
+            --cidr "${RUNNER_IP}/32"
 
+      # ----------------------------------------------------------------
+      # Validação do par de chaves SSH
+      #
+      # Não imprime nenhuma chave.
+      # Apenas compara os fingerprints.
+      # ----------------------------------------------------------------
+      - name: Validar par de chaves SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.AWS_PRIVATE_KEY }}
+          SSH_PUBLIC_KEY: ${{ secrets.TF_SSH_PUBLIC_KEY }}
+        run: |
+          printf '%s\n' "$SSH_PRIVATE_KEY" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+
+          echo "Fingerprint da chave pública do Terraform:"
+          printf '%s\n' "$SSH_PUBLIC_KEY" | ssh-keygen -lf -
+
+          echo "Fingerprint da chave pública derivada da chave privada do Deploy:"
+          ssh-keygen -y -f /tmp/deploy_key | ssh-keygen -lf -
+
+          DERIVED=$(ssh-keygen -y -f /tmp/deploy_key)
+          PROVIDED=$(printf '%s\n' "$SSH_PUBLIC_KEY")
+
+          if [ "$DERIVED" = "$PROVIDED" ]; then
+            echo "OK: AWS_PRIVATE_KEY e TF_SSH_PUBLIC_KEY formam o mesmo par."
+          else
+            echo "ERRO: AWS_PRIVATE_KEY e TF_SSH_PUBLIC_KEY NÃO correspondem."
+            exit 1
+          fi
+
+          rm -f /tmp/deploy_key
+
+      # ----------------------------------------------------------------
+      # Deploy via SSH
+      # ----------------------------------------------------------------
       - name: Deploy via SSH (docker compose)
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -153,14 +197,31 @@ jobs:
           key: ${{ secrets.AWS_PRIVATE_KEY }}
           script: |
             cd /opt/cargo-truck
-            git pull
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull backend || true
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 
+            git pull
+
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
+              -u ${{ github.actor }} \
+              --password-stdin
+
+            docker compose \
+              -f docker-compose.yml \
+              -f docker-compose.prod.yml \
+              pull backend || true
+
+            docker compose \
+              -f docker-compose.yml \
+              -f docker-compose.prod.yml \
+              up -d --build
+
+      # ----------------------------------------------------------------
+      # Revoga o acesso SSH do runner
+      # ----------------------------------------------------------------
       - name: Revogar o acesso SSH do runner
         if: always()
         run: |
           aws ec2 revoke-security-group-ingress \
             --group-id ${{ needs.terraform.outputs.sg_id }} \
-            --protocol tcp --port 22 --cidr "${{ steps.authorize.outputs.runner_ip }}/32"
+            --protocol tcp \
+            --port 22 \
+            --cidr "${{ steps.authorize.outputs.runner_ip }}/32"

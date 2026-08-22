@@ -3,6 +3,11 @@ output "instance_public_ip" {
   value       = aws_instance.app.public_ip
 }
 
+output "instance_id" {
+  description = "ID da instancia EC2 (usado para aws ec2 wait instance-status-ok)"
+  value       = aws_instance.app.id
+}
+
 output "ssh_command" {
   description = "Comando pronto para acessar a instancia via SSH"
   value       = "ssh -i cargo-truck-key ubuntu@${aws_instance.app.public_ip}"

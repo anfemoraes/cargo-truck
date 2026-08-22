@@ -121,6 +121,7 @@ resource "aws_instance" "app" {
   user_data = templatefile("${path.module}/user_data.sh.tpl", {
     project_name         = var.project_name
     docker_compose_repo  = var.docker_compose_repo
+    git_branch           = var.git_branch
   })
 
   root_block_device {

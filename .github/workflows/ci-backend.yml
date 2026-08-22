@@ -118,6 +118,7 @@ jobs:
           TF_VAR_ssh_public_key: ${{ secrets.TF_SSH_PUBLIC_KEY }}
           TF_VAR_ssh_allowed_cidr: ${{ secrets.TF_SSH_ALLOWED_CIDR }}
           TF_VAR_docker_compose_repo: https://github.com/${{ github.repository }}.git
+          TF_VAR_git_branch: ${{ github.ref_name }}
 
       - name: Capturar outputs do Terraform
         id: tf-outputs
@@ -196,6 +197,7 @@ jobs:
           username: ubuntu
           key: ${{ secrets.AWS_PRIVATE_KEY }}
           script: |
+            sudo chown -R ubuntu:ubuntu /opt/cargo-truck
             git config --global --add safe.directory /opt/cargo-truck
             cd /opt/cargo-truck
 

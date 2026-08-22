@@ -23,10 +23,14 @@ systemctl start docker
 
 usermod -aG docker ubuntu
 
-# Clona o repositorio da aplicacao (contem o docker-compose.yml)
+# Clona o repositorio da aplicacao (contem o docker-compose.yml) na branch correta
 APP_DIR=/opt/${project_name}
 mkdir -p "$APP_DIR"
-git clone ${docker_compose_repo} "$APP_DIR" || (cd "$APP_DIR" && git pull)
+git clone --branch ${git_branch} ${docker_compose_repo} "$APP_DIR" || (cd "$APP_DIR" && git fetch origin && git checkout ${git_branch} && git reset --hard origin/${git_branch})
+
+# Garante que o usuario ubuntu (usado no deploy via SSH) e dono dos arquivos,
+# nao o root (que roda este script no boot)
+chown -R ubuntu:ubuntu "$APP_DIR"
 
 cd "$APP_DIR"
 

@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "Regiao AWS onde os recursos serao provisionados"
   type        = string
-  default     = "us-east-2"
+  default     = "us-east-1"
 }
 
 variable "project_name" {
@@ -59,4 +59,10 @@ variable "app_ports" {
 variable "docker_compose_repo" {
   description = "URL do repositorio git que contem o docker-compose.yml a ser clonado na instancia"
   type        = string
+}
+
+variable "git_branch" {
+  description = "Branch do repositorio a ser clonada/atualizada na instancia (deve bater com a branch que disparou o deploy)"
+  type        = string
+  default     = "main"
 }
